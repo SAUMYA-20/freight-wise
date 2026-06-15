@@ -610,6 +610,13 @@ app.use('/api/warehouse-congestion', warehouseCongestionRouter);
 const hsScanRouter = require('./features/hs-scan/hsScanRoute');
 app.use('/api/hs-scan', hsScanRouter);
 
+app.get('/', (req, res) => {
+  res.json({
+    status: 'Backend is running',
+    success: true
+  });
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
