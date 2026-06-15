@@ -25,7 +25,7 @@ export default function HSSearchBar() {
 
   // Fetch API status on mount
   useEffect(() => {
-    const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
+    const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
     fetch(`${baseUrl}/api/assistant/status`)
       .then(res => res.json())
       .then(data => setGeminiAvailable(data.geminiAvailable))
@@ -47,7 +47,7 @@ export default function HSSearchBar() {
       setLoading(true);
       setError('');
       try {
-        const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
+        const baseUrlSearch = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
         const res = await fetch(`${baseUrl}/api/search?q=${encodeURIComponent(query)}`);
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
@@ -78,7 +78,7 @@ export default function HSSearchBar() {
 
     try {
       // 1. Call intent parser
-      const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
       const parseRes = await fetch(`${baseUrl}/api/assistant/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,7 +91,7 @@ export default function HSSearchBar() {
       setAiStatus(`Searching for: "${parsed.product}"...`);
 
       // 2. Search HS codes using the extracted product
-      const baseUrlSearch = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
       const searchRes = await fetch(`${baseUrlSearch}/api/search?q=${encodeURIComponent(parsed.product)}`);
       if (!searchRes.ok) throw new Error('Search failed');
       const searchData = await searchRes.json();
