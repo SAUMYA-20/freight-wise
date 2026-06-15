@@ -5,6 +5,8 @@ import { Search, Loader2, Sparkles, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+
 interface SearchResult {
   hsn4Digit: string;
   hsn8Digit: string;
@@ -25,8 +27,7 @@ export default function HSSearchBar() {
 
   // Fetch API status on mount
   useEffect(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-    fetch(`${baseUrl}/api/assistant/status`)
+    fetch(`${BACKEND_URL}/api/assistant/status`)
       .then(res => res.json())
       .then(data => setGeminiAvailable(data.geminiAvailable))
       .catch(err => {
@@ -47,8 +48,7 @@ export default function HSSearchBar() {
       setLoading(true);
       setError('');
       try {
-        const baseUrlSearch = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-        const res = await fetch(`${baseUrl}/api/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(query)}`);
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
         if (data.error) {
@@ -77,9 +77,8 @@ export default function HSSearchBar() {
     setAiStatus('Analyzing your shipment request...');
 
     try {
-      // 1. Call intent parser
-      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-      const parseRes = await fetch(`${baseUrl}/api/assistant/parse`, {
+     // 1. Call intent parser
+     const parseRes = await fetch(`${BACKEND_URL}/api/assistant/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
@@ -91,8 +90,7 @@ export default function HSSearchBar() {
       setAiStatus(`Searching for: "${parsed.product}"...`);
 
       // 2. Search HS codes using the extracted product
-      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-      const searchRes = await fetch(`${baseUrlSearch}/api/search?q=${encodeURIComponent(parsed.product)}`);
+      const searchRes = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(parsed.product)}`);
       if (!searchRes.ok) throw new Error('Search failed');
       const searchData = await searchRes.json();
       const topResult = searchData.results?.[0];
