@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getBackendUrl } from '../../../../lib/config';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
+const BACKEND_URL = getBackendUrl();
 
 async function proxy(url: string, init?: RequestInit) {
   const res = await fetch(url, { cache: 'no-store', ...init });

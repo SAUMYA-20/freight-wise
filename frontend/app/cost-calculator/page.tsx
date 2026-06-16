@@ -3,6 +3,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { getBackendUrl } from "../../lib/config";
+
+const BACKEND_URL = getBackendUrl();
 import {
   Calculator,
   ArrowRight,
@@ -93,8 +96,7 @@ export default function CostCalculatorPage() {
     setAiStatus("Analyzing your prompt...");
 
     try {
-      const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
-      const parseRes = await fetch(`${baseUrl}/api/assistant/parse`, {
+      const parseRes = await fetch(`${BACKEND_URL}/api/assistant/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery }),

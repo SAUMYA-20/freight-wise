@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { Search, Loader2, Sparkles, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { getBackendUrl } from '../lib/config';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = getBackendUrl();
 
 interface SearchResult {
   hsn4Digit: string;

@@ -7,6 +7,9 @@ import {
   AlertCircle, ScanLine, Package, ZoomIn,
 } from 'lucide-react';
 import Link from 'next/link';
+import { getBackendUrl } from '../../lib/config';
+
+const BACKEND_URL = getBackendUrl();
 
 /* ─────────────────────────────── Types ─────────────────────────────── */
 interface HSCode {
@@ -87,8 +90,7 @@ export default function HSCodesPage() {
 
   /* ── Check backend health on mount ── */
   useEffect(() => {
-    const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
-    fetch(`${baseUrl}/api/hs-scan/health`)
+    fetch(`${BACKEND_URL}/api/hs-scan/health`)
       .then(r => r.json())
       .then(d => setGeminiOk(d.geminiAvailable))
       .catch(() => setGeminiOk(false));
@@ -100,8 +102,7 @@ export default function HSCodesPage() {
     const timer = setTimeout(async () => {
       try {
         setLoading(true); setError('');
-        const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
-        const res = await fetch(`${baseUrl}/api/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(query)}`);
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
         setResults(data.results || []);
@@ -157,8 +158,7 @@ export default function HSCodesPage() {
     runScanAnimation();
 
     try {
-      const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
-      const res = await fetch(`${baseUrl}/api/hs-scan/identify`, {
+      const res = await fetch(`${BACKEND_URL}/api/hs-scan/identify`, {
         method: 'POST',
         body: form,
       });

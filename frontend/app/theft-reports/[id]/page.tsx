@@ -11,6 +11,7 @@ import {
   getManagerToken, getManagerName, setManagerSession,
   clearManagerSession, isManagerLoggedIn, managerHeaders,
 } from "../../../lib/managerAuth";
+import { getBackendUrl } from "../../../lib/config";
 
 interface Evidence {
   _id: string;
@@ -65,7 +66,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   Closed: { bg: "#F3F4F6", color: "#6B7280" },
 };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001";
+const BACKEND_URL = getBackendUrl();
 
 function evidenceUrl(url: string) {
   if (url.startsWith("http")) return url;

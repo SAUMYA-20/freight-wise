@@ -9,7 +9,7 @@ const NOTIFICATION_FROM = process.env.NOTIFICATION_FROM || 'alerts@zodfaraway.co
 const NOTIFICATION_EMAIL = process.env.NOTIFICATION_EMAIL || 'operations@zodfaraway.com';
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL;
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
+const APP_BASE_URL = process.env.APP_BASE_URL || (process.env.VERCEL ? 'https://freight-wise-kappa.vercel.app' : 'http://localhost:3000');
 
 async function sendEmail({ subject, html, text }) {
   if (!RESEND_API_KEY) return { channel: 'email', sent: false, reason: 'RESEND_API_KEY not configured' };

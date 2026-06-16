@@ -8,6 +8,9 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend
 } from 'recharts';
+import { getBackendUrl } from '../../../lib/config';
+
+const BACKEND_URL = getBackendUrl();
 
 const DESTINATIONS = ['India', 'UAE', 'Germany', 'France', 'Italy', 'Netherlands', 'Spain'];
 const DEST_FLAGS: Record<string, string> = {
@@ -74,8 +77,7 @@ export default function ProductDetailPage() {
     if (dest) setDestination(dest);
   }, [searchParams]);
   useEffect(() => {
-    const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
-    fetch(`${baseUrl}/api/product/${hsCode}/intelligence`)
+    fetch(`${BACKEND_URL}/api/product/${hsCode}/intelligence`)
       .then(r => r.json())
       .then(d => { if (d.product) setProduct(d.product); })
       .catch(console.error)
@@ -89,8 +91,7 @@ export default function ProductDetailPage() {
       setDestLoading(true);
       setIntelligence(null);
     }, 0);
-    const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
-    fetch(`${baseUrl}/api/product/${hsCode}/intelligence?destination=${destination}&weight=100`)
+    fetch(`${BACKEND_URL}/api/product/${hsCode}/intelligence?destination=${destination}&weight=100`)
       .then(r => r.json())
       .then(d => setIntelligence(d))
       .catch(console.error)
@@ -101,8 +102,7 @@ export default function ProductDetailPage() {
     if (!product) return;
     const tops = ['India', 'UAE', 'Germany', 'Spain'];
     Promise.all(tops.map(d => {
-      const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:5001` : 'http://localhost:5001';
-      return fetch(`${baseUrl}/api/product/${hsCode}/intelligence?destination=${d}&weight=100`).then(r => r.json());
+      return fetch(`${BACKEND_URL}/api/product/${hsCode}/intelligence?destination=${d}&weight=100`).then(r => r.json());
     })).then(results => {
       setComparisonData(results.map((r, i) => {
         if (!r.taxes || !r.freight) return { name: tops[i], Total: 0, Duty: 0, VAT: 0, Freight: 0 };
