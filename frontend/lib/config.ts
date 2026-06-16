@@ -17,7 +17,7 @@ export function getBackendUrl(): string {
       !hostname.startsWith('10.') &&
       !hostname.startsWith('172.')
     ) {
-      return 'https://freight-wise-jksh.vercel.app';
+      return 'https://freight-wise-backend.onrender.com';
     }
 
     // If we are on a local network IP (e.g. testing from mobile), use the same host but on backend port 5001
@@ -35,7 +35,7 @@ export function getBackendUrl(): string {
   }
   
   if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    return 'https://freight-wise-jksh.vercel.app';
+    return 'https://freight-wise-backend.onrender.com';
   }
 
   return 'http://localhost:5001';

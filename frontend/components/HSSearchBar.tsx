@@ -4,9 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Loader2, Sparkles, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getBackendUrl } from '../lib/config';
 
-const BACKEND_URL = getBackendUrl();
 
 interface SearchResult {
   hsn4Digit: string;
@@ -28,7 +26,7 @@ export default function HSSearchBar() {
 
   // Fetch API status on mount
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/assistant/status`)
+    fetch(`/api/assistant/status`)
       .then(res => res.json())
       .then(data => setGeminiAvailable(data.geminiAvailable))
       .catch(err => {
@@ -49,7 +47,7 @@ export default function HSSearchBar() {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
         if (data.error) {
@@ -79,7 +77,7 @@ export default function HSSearchBar() {
 
     try {
      // 1. Call intent parser
-     const parseRes = await fetch(`${BACKEND_URL}/api/assistant/parse`, {
+     const parseRes = await fetch(`/api/assistant/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
@@ -91,7 +89,7 @@ export default function HSSearchBar() {
       setAiStatus(`Searching for: "${parsed.product}"...`);
 
       // 2. Search HS codes using the extracted product
-      const searchRes = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(parsed.product)}`);
+      const searchRes = await fetch(`/api/search?q=${encodeURIComponent(parsed.product)}`);
       if (!searchRes.ok) throw new Error('Search failed');
       const searchData = await searchRes.json();
       const topResult = searchData.results?.[0];
