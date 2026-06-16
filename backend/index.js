@@ -21,14 +21,17 @@ app.use(
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Serve uploaded evidence files
+// VERCEL WARNING: Vercel file systems are read-only and ephemeral (except /tmp). 
+// If users are uploading files at runtime, this static folder will NOT persist across requests.
+// You should use cloud storage (like AWS S3, Cloudinary, or Vercel Blob) for uploads instead.
 app.use('/uploads/theft-reports', express.static(path.join(__dirname, 'uploads', 'theft-reports')));
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
+// VERCEL FIX: Serverless functions can spawn concurrently. 
+// Use a cached connection approach if possible in the future, but this works for now.
 if (!MONGODB_URI) {
   console.error("MONGODB_URI is missing in .env file");
-  // We don't exit in development, but you should add it!
 } else {
   mongoose.connect(MONGODB_URI).then(() => {
     console.log("Connected to MongoDB.");
@@ -39,12 +42,20 @@ if (!MONGODB_URI) {
 
 let embedder;
 
+// VERCEL FIX: @xenova/transformers needs to download models to a cache. 
+// Vercel's root directory is read-only. We must point the cache to the writable /tmp directory.
+process.env.TRANSFORMERS_CACHE = '/tmp';
+
 async function loadEmbedder() {
-  const { pipeline } = await import('@xenova/transformers');
-  embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-    quantized: true,
-  });
-  console.log("AI Embedder ready.");
+  try {
+    const { pipeline } = await import('@xenova/transformers');
+    embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+      quantized: true,
+    });
+    console.log("AI Embedder ready.");
+  } catch (err) {
+    console.error("Failed to load AI Embedder:", err);
+  }
 }
 
 // Start loading embedder in background
@@ -67,7 +78,6 @@ app.get('/api/search', async (req, res) => {
     const queryEmbedding = Array.from(output.data);
 
     // Perform Vector Search on MongoDB Atlas
-    // Note: You must create an Atlas Vector Search index named "vector_index" on the "hscodes" collection
     const results = await mongoose.connection.collection('hscodes').aggregate([
       {
         "$vectorSearch": {
@@ -90,8 +100,6 @@ app.get('/api/search', async (req, res) => {
       }
     ]).toArray();
 
-    // If vector search is not set up, or the user hasn't created the index yet,
-    // this will silently return an empty array instead of throwing an error in some MongoDB versions.
     if (results.length === 0) {
       throw new Error("Vector search returned 0 results, index might be missing or building.");
     }
@@ -100,12 +108,11 @@ app.get('/api/search', async (req, res) => {
   } catch (error) {
     console.error("Vector search failed:", error);
     
-    // Fallback to basic text search if Vector Search isn't configured yet
+    // Fallback to basic text search
     try {
         const { q } = req.query;
         const HSCode = require('./models/HSCode');
         
-        // Map common terms to official dataset terms
         const synonyms = {
           'laptop': 'computer',
           'phone': 'telephone',
@@ -117,7 +124,6 @@ app.get('/api/search', async (req, res) => {
         };
         const mappedQ = synonyms[q.toLowerCase().trim()] || q;
         
-        // Split the query into words for better fallback matching
         const words = mappedQ.split(' ').filter(w => w.length > 2);
         const searchRegexes = words.length > 0 ? words.map(w => new RegExp(w, 'i')) : [new RegExp(mappedQ, 'i')];
         
@@ -125,7 +131,6 @@ app.get('/api/search', async (req, res) => {
             productName: { $in: searchRegexes }
         }).limit(10).lean();
         
-        // Remove embeddings from response to keep it light
         const cleanedResults = fallbackResults.map(r => {
             delete r.embedding;
             delete r._id;
@@ -150,16 +155,18 @@ const { calculateFreightCost } = require('./services/freightEngine');
 const { startFuelIntelligenceCron } = require('./services/fuelIntelligence');
 const { optimizeRoute } = require('./services/routeOptimization');
 
-// Start the background cron job for fuel prices
-startFuelIntelligenceCron();
+// VERCEL WARNING: Background jobs (setInterval, node-cron) DO NOT work on Vercel. 
+// Serverless functions shut down immediately after returning a response. 
+// To run crons, you must create an endpoint (e.g., /api/cron/fuel) and trigger it using Vercel Cron Jobs.
+if (process.env.NODE_ENV !== 'production') {
+  startFuelIntelligenceCron(); 
+}
 
-// Get Product Details + Trade Intelligence based on Destination
 app.get('/api/product/:hsCode/intelligence', async (req, res) => {
   try {
     const { hsCode } = req.params;
-    const { destination, weight = 100 } = req.query; // Default 100kg if not provided
+    const { destination, weight = 100 } = req.query;
 
-    // 1. Get Product Details from HSCode Collection
     const HSCode = require('./models/HSCode');
     const product = await HSCode.findOne({ hsn8Digit: hsCode }).lean();
     
@@ -167,32 +174,26 @@ app.get('/api/product/:hsCode/intelligence', async (req, res) => {
       return res.status(404).json({ error: "Product HS Code not found" });
     }
 
-    // Ensure we don't send massive embeddings to the frontend
     delete product.embedding;
 
-    // If no destination is selected yet, just return the product info
     if (!destination) {
       return res.json({ product });
     }
 
-    // 2. Fetch Compliance Rules & Taxes for Destination
-    // For demo purposes, if they don't exist in DB, we'll generate deterministic mock ones
     let countryTax = await CountryTax.findOne({ hsnCode: hsCode, destinationCountry: destination }).lean();
     let compRule = await ComplianceRule.findOne({ hsnCode: hsCode, destinationCountry: destination }).lean();
     let docRule = await DocumentRule.findOne({ hsnCode: hsCode, destinationCountry: destination }).lean();
 
-    // --- Dynamic Mock Rule Generator (for demonstration) ---
     if (!countryTax) {
-      // Deterministic generation based on character code
       const hash = hsCode.charCodeAt(0) + destination.charCodeAt(0);
       
       countryTax = {
-        importDuty: (hash % 15) + 5, // 5% to 20%
+        importDuty: (hash % 15) + 5,
         vatGst: destination === 'India' ? 18 : (destination === 'UAE' ? 5 : 20)
       };
       
       compRule = {
-        isDangerousGood: hash % 10 === 0, // 10% chance
+        isDangerousGood: hash % 10 === 0,
         restrictions: hash % 3 === 0 ? ['Import License Required'] : [],
         dgWarnings: hash % 10 === 0 ? ['Class 9 Miscellaneous Dangerous Goods'] : []
       };
@@ -202,17 +203,14 @@ app.get('/api/product/:hsCode/intelligence', async (req, res) => {
       };
       if (hash % 2 === 0) docRule.requiredDocuments.push('Phytosanitary Certificate');
     }
-    // -------------------------------------------------------
 
-    // 3. Calculate Freight Cost
-    const origin = 'United States'; // Hardcoded for demo
+    const origin = 'United States';
     const freightCost = await calculateFreightCost({
       origin,
       destination,
       weightKg: parseFloat(weight)
     });
 
-    // 4. Send combined Trade Intelligence Payload
     res.json({
       product,
       taxes: countryTax,
@@ -227,8 +225,6 @@ app.get('/api/product/:hsCode/intelligence', async (req, res) => {
   }
 });
 
-
-
 // --- AI ASSISTANT PARSING ENDPOINT ---
 
 const SUPPORTED_COUNTRIES = [
@@ -239,6 +235,7 @@ const SUPPORTED_COUNTRIES = [
 ];
 
 function fallbackLocalParse(query) {
+  // ... [Keep existing fallbackLocalParse logic unchanged] ...
   const lowercaseQuery = query.toLowerCase();
   
   let destination = null;
@@ -266,25 +263,21 @@ function fallbackLocalParse(query) {
     }
   }
 
-  // 1. Extract Quantity
   let quantity = 1;
   let quantityParsed = false;
   
-  // Try pattern multiplier first, e.g. "20 10kg" or "20x10kg"
   const qtyWeightRegex = /(\d+)\s*(?:x|\*|\s+)\s*(\d+(?:\.\d+)?)\s*(?:kg|kilograms?|kilo?s?)\b/i;
   const qtyWeightMatch = lowercaseQuery.match(qtyWeightRegex);
   if (qtyWeightMatch) {
     quantity = parseInt(qtyWeightMatch[1], 10);
     quantityParsed = true;
   } else {
-    // Check separate quantity suffix
     const qtyRegex = /(\d+)\s*(?:units|pcs|pieces|items|qty|quantity)\b/i;
     const qtyMatch = lowercaseQuery.match(qtyRegex);
     if (qtyMatch) {
       quantity = parseInt(qtyMatch[1], 10);
       quantityParsed = true;
     } else {
-      // Check isolated leading quantity, e.g. "export 40 batteries"
       const leadingQtyRegex = /\b(?:export|import|ship|send)\s+(\d+)\b/i;
       const leadingQtyMatch = lowercaseQuery.match(leadingQtyRegex);
       if (leadingQtyMatch) {
@@ -296,7 +289,6 @@ function fallbackLocalParse(query) {
     }
   }
 
-  // 2. Extract Weight (unit or total)
   let unitWeight = null;
   let totalWeight = null;
   if (qtyWeightMatch) {
@@ -319,7 +311,6 @@ function fallbackLocalParse(query) {
     weight = quantity * unitWeight;
   }
 
-  // 3. Extract Transport Mode
   let mode = null;
   if (/\b(?:air|plane|flight)\b/i.test(lowercaseQuery)) {
     mode = 'air';
@@ -329,7 +320,6 @@ function fallbackLocalParse(query) {
     mode = 'road';
   }
 
-  // 4. Extract Price/Value (unit or total)
   let unitPrice = null;
   let totalPrice = null;
   const unitPriceRegex = /(?:each\s*(?:costing|cost|at|value|price)?\s*(?:of)?\s*\$?\s*(\d+(?:\.\d+)?)\s*(?:dollars?|usd)?\b)|(?:\$?\s*(\d+(?:\.\d+)?)\s*(?:dollars?|usd)?\s*each\b)/i;
@@ -357,31 +347,11 @@ function fallbackLocalParse(query) {
   }
   
   const noisePhrases = [
-    /i want to export/gi,
-    /i want to import/gi,
-    /i want to ship/gi,
-    /i want to send/gi,
-    /please export/gi,
-    /please ship/gi,
-    /please send/gi,
-    /how to export/gi,
-    /exporting/gi,
-    /importing/gi,
-    /export/gi,
-    /import/gi,
-    /shipment/gi,
-    /shipping/gi,
-    /ship/gi,
-    /send/gi,
-    /\bto\b/gi,
-    /\bfrom\b/gi,
-    /\bof\b/gi,
-    /\ba\b/gi,
-    /\ban\b/gi,
-    /\bthe\b/gi,
-    /\bwith\b/gi,
-    /\bweighing\b/gi,
-    /\bweight\b/gi,
+    /i want to export/gi, /i want to import/gi, /i want to ship/gi, /i want to send/gi,
+    /please export/gi, /please ship/gi, /please send/gi, /how to export/gi,
+    /exporting/gi, /importing/gi, /export/gi, /import/gi, /shipment/gi, /shipping/gi,
+    /ship/gi, /send/gi, /\bto\b/gi, /\bfrom\b/gi, /\bof\b/gi, /\ba\b/gi, /\ban\b/gi,
+    /\bthe\b/gi, /\bwith\b/gi, /\bweighing\b/gi, /\bweight\b/gi,
     /\b(?:going\s+)?by\s+(?:air|sea|road|ocean|truck|plane|ship|flight)\b/gi,
     /\b(?:air|sea|road)\s+freight\b/gi,
     /(?:each\s*(?:costing|cost|at|value|price)?\s*(?:of)?\s*\$?\s*\d+(?:\.\d+)?\s*(?:dollars?|usd)?\b)|(?:\$?\s*\d+(?:\.\d+)?\s*(?:dollars?|usd)?\s*each\b)/gi,
@@ -468,42 +438,15 @@ User Query: "${query}"`
               responseSchema: {
                 type: "object",
                 properties: {
-                  product: {
-                    type: "string",
-                    description: "The primary product/commodity name being shipped, e.g. 'leather wallets', 'laptop'."
-                  },
-                  destination: {
-                    type: "string",
-                    description: "The destination country name, matching exactly one of the supported countries list (Capitalized), or null if not specified."
-                  },
-                  origin: {
-                    type: "string",
-                    description: "The origin country name, matching exactly one of the supported countries list (Capitalized), or null if not specified."
-                  },
-                  quantity: {
-                    type: "number",
-                    description: "The number of units or items being shipped. Defaults to 1 if not explicitly mentioned otherwise."
-                  },
-                  unitWeight: {
-                    type: "number",
-                    description: "The weight of a single unit in kilograms (numeric only), or null if not specified. E.g. for '40 30kg batteries', unitWeight is 30."
-                  },
-                  totalWeight: {
-                    type: "number",
-                    description: "The total gross weight of the shipment in kilograms if explicitly specified (numeric only), or null if not specified."
-                  },
-                  unitPrice: {
-                    type: "number",
-                    description: "The price of a single unit in USD (numeric only), or null if not specified. E.g. for 'each costing 200 dollars', unitPrice is 200."
-                  },
-                  totalPrice: {
-                    type: "number",
-                    description: "The total cost or value of the shipment in USD if explicitly specified (numeric only), or null if not specified."
-                  },
-                  mode: {
-                    type: "string",
-                    description: "The preferred transport mode, matching exactly one of: 'air', 'sea', 'road', or null if not specified."
-                  }
+                  product: { type: "string", description: "The primary product/commodity name" },
+                  destination: { type: "string", description: "The destination country name" },
+                  origin: { type: "string", description: "The origin country name" },
+                  quantity: { type: "number", description: "The number of units" },
+                  unitWeight: { type: "number", description: "Weight of a single unit" },
+                  totalWeight: { type: "number", description: "Total gross weight" },
+                  unitPrice: { type: "number", description: "Price of a single unit in USD" },
+                  totalPrice: { type: "number", description: "Total cost in USD" },
+                  mode: { type: "string", description: "Transport mode: air, sea, road" }
                 },
                 required: ["product"]
               }
@@ -571,7 +514,6 @@ User Query: "${query}"`
   }
 });
 
-
 // --- ROUTE OPTIMIZATION & CONGESTION ---
 
 app.get('/api/routes/optimize', async (req, res) => {
@@ -625,8 +567,14 @@ app.get('/', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
-});
+// VERCEL FIX: Do not call app.listen() in production on Vercel. 
+// Vercel handles the server listening process automatically. We just need to export the app.
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5001;
+  app.listen(PORT, () => {
+    console.log(`Backend server running locally on port ${PORT}`);
+  });
+}
 
+// VERCEL FIX: You MUST export the express app for Vercel Serverless Functions to pick it up.
+module.exports = app;
